@@ -35,8 +35,48 @@
             height: 100%;
             background: #000;
             z-index: 10;
-            animation: darkToLight 2s ease-out forwards;
             pointer-events: none;
+        }
+        
+        /* Экран загрузки */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 11;
+            background-color: #000;
+        }
+        
+        .loading-text {
+            color: #ff0000;
+            font-size: 2.5rem;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+            margin-bottom: 20px;
+            animation: pulseText 1.5s infinite ease-in-out;
+        }
+        
+        @keyframes pulseText {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 0, 0, 0.3);
+            border-radius: 50%;
+            border-top-color: #ff0000;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
         
         video#bg-video {
@@ -107,24 +147,6 @@
                 sway 6s ease-in-out infinite;
             border: 1px solid rgba(255, 50, 50, 0.2);
             transition: border 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        /* Стиль для карточки с обложкой */
-        .card-with-cover {
-            background: linear-gradient(rgba(40, 5, 10, 0.7), rgba(40, 5, 10, 0.7));
-        }
-        
-        .card-cover {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: -1;
-            opacity: 0.3;
         }
         
         /* Неоновая обводка только при наведении на саму карточку (не на кнопки внутри) */
@@ -263,8 +285,6 @@
             flex-direction: column;
             align-items: center;
             gap: 15px;
-            position: relative;
-            z-index: 2;
         }
         
         .progress-bar {
@@ -347,6 +367,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
+    <div class="loading-screen">
+        <div class="loading-text">Ожидаем</div>
+        <div class="loading-spinner"></div>
+    </div>
+    
     <div class="darkness"></div>
     
     <video id="bg-video" autoplay muted loop>
@@ -373,8 +398,7 @@
                 </button>
             </div>
             
-            <div class="card card-3 card-with-cover">
-                <img id="audio-cover" class="card-cover" alt="Audio cover">
+            <div class="card card-3">
                 <div class="player-container">
                     <div class="progress-bar" id="progress-bar">
                         <div class="progress" id="progress"></div>
@@ -399,58 +423,10 @@
         const progressBar = document.getElementById('progress-bar');
         const progress = document.getElementById('progress');
         const timeDisplay = document.getElementById('time-display');
-        const audioCover = document.getElementById('audio-cover');
+        const loadingScreen = document.querySelector('.loading-screen');
+        const darkness = document.querySelector('.darkness');
         
         let isPlaying = false;
-        
-        // Функция для извлечения обложки из аудиофайла
-        function extractAudioCover() {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const request = new XMLHttpRequest();
-            
-            request.open('GET', 'audio.mp3', true);
-            request.responseType = 'arraybuffer';
-            
-            request.onload = function() {
-                audioContext.decodeAudioData(request.response, function(buffer) {
-                    // Проверяем наличие метаданных
-                    if (buffer.metadata && buffer.metadata.picture) {
-                        const picture = buffer.metadata.picture[0];
-                        const blob = new Blob([picture.data], {type: picture.type});
-                        const url = URL.createObjectURL(blob);
-                        audioCover.src = url;
-                    } else {
-                        // Если обложки нет, используем fallback
-                        audioCover.src = 'fallback-cover.jpg';
-                    }
-                });
-            };
-            
-            request.send();
-        }
-        
-        // Альтернативный метод для браузеров, которые не поддерживают AudioContext.metadata
-        function getAudioCoverFallback() {
-            const audioElement = document.createElement('audio');
-            audioElement.src = 'audio.mp3';
-            
-            audioElement.addEventListener('loadedmetadata', function() {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = 500;
-                canvas.height = 500;
-                
-                // Пытаемся извлечь обложку (работает не во всех браузерах)
-                ctx.drawImage(audioElement, 0, 0, canvas.width, canvas.height);
-                
-                const dataURL = canvas.toDataURL();
-                if (dataURL !== 'data:,') { // Проверяем, не пустое ли изображение
-                    audioCover.src = dataURL;
-                } else {
-                    audioCover.src = 'fallback-cover.jpg';
-                }
-            });
-        }
         
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
@@ -484,6 +460,25 @@
             audio.currentTime = (e.offsetX / width) * audio.duration;
         }
         
+        // Функция для проверки загрузки видео
+        function checkVideoLoaded() {
+            const video = document.getElementById('bg-video');
+            
+            if (video.readyState >= 3) { // HAVE_FUTURE_DATA
+                setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                    darkness.style.animation = 'darkToLight 2s ease-out forwards';
+                }, 2000); // Дополнительная задержка 2 секунды
+            } else {
+                video.addEventListener('canplay', function() {
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                        darkness.style.animation = 'darkToLight 2s ease-out forwards';
+                    }, 2000);
+                });
+            }
+        }
+        
         // Инициализация
         playBtn.addEventListener('click', togglePlay);
         audio.addEventListener('timeupdate', updateProgress);
@@ -495,18 +490,11 @@
         
         audio.addEventListener('loadedmetadata', () => {
             timeDisplay.textContent = `0:00 / ${formatTime(audio.duration)}`;
-            
-            // Пытаемся извлечь обложку
-            try {
-                extractAudioCover();
-            } catch (e) {
-                console.log("Не удалось извлечь обложку через AudioContext, пробуем fallback метод");
-                getAudioCoverFallback();
-            }
         });
         
         window.addEventListener('load', () => {
             document.querySelector('.scroll-container').scrollTo(0, 0);
+            checkVideoLoaded();
         });
     </script>
 </body>
